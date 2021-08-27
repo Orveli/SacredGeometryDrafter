@@ -1,3 +1,10 @@
+// Ideas / Todo:
+// Create a line tool that creates a single line between two grid points
+// Tool to reset symmetry origin and another one to rotate a set of symmetries drawn away from origin. (Like previously removed "fractalSymmetry")
+// Current grid drawing is not optimal enough for small grids (Currently visual grid is not scalable)
+// Undo could hide elements insted of deleting them (would enable redo functionality) - saving would then need to remove hidden elements from saved file
+// Enable 4 timed symetry and make sure grid is redrawn after that is selected/unselected
+
 class Grid {
     constructor(canvas, draw) {
         this.canvas = canvas;
@@ -7,15 +14,17 @@ class Grid {
         this.originX = this.width / 2;
         this.originY = this.height / 2;
         this.gridSize = 40;
-        this.deb = this.draw.circle(10).move(-100, -100).fill("none").stroke({ width: 2, color: "red" });
+        // TODO: Make both tools use the same cursor
+        this.deb = this.draw.circle(10).move(-100, -100).fill("none").stroke({ width: 1, color: "red" });
         this.symmetryCount = 6;
     }
-
     scaleGridDown() {
         this.gridSize = this.gridSize / 2;
+        if(this.gridSize<20) this.gridSize = 20;
     }
     scaleGridUp() {
         this.gridSize = this.gridSize * 2
+        if(this.gridSize>160) this.gridSize = 160;
     }
     movePointVerticaly(point, up) {
         let xChange = this.gridSize / 2 * Math.sin((90 - 360 / this.symmetryCount) * (Math.PI / 180));
@@ -61,10 +70,8 @@ class Grid {
         this.deb.move(point[0] - 5, point[1] - 5);
         return point;
     }
-
-
     closestPoint(oX, oY, mX, mY, acceptGiven) {
-        // Even with a 3 fold symmetry we want to be able to snap to 60% angles so thats why symmetryCount is not always used as such
+        // Even with a 3 fold symmetry we want to be able to snap to 60% angles
         let pointCount = this.symmetryCount;
         if (pointCount === 3) pointCount = 6;
         // calculates all possible point around a circle
@@ -91,19 +98,16 @@ class Grid {
         return nearestPoint;
     }
 }
-
 export class GridVisualise extends Grid {
     constructor(canvas, draw) {
         super(canvas, draw);
-        this.gridGroup; // Group containing grid points 
+        this.gridGroup; // svg group containing grid points 
         this.gridPoints = Array();
-
-       this.createGrid();
+        this.createGrid();
     }
-
-    // TODO: This creates dublicate points at every second row
+    // TODO: Optimize! This creates dublicate points at every second row and is slow as hell
     createGrid() {
-      var group = this.draw.group()
+        var group = this.draw.group()
         this.gridPoints = [];
         // calculates X-Y distances of the grid
         let xChange = this.gridSize / 2 * Math.sin((90 - 360 / this.symmetryCount) * (Math.PI / 180));
@@ -124,67 +128,26 @@ export class GridVisualise extends Grid {
             curX = nxtRow[0]
         }
         while (curY < this.height)
-        this.gridGroup = group.addClass("Gridgroup"); 
+        this.gridGroup = group.addClass("Gridgroup");
+    }
+    scaleGridDown() {
+        this.gridSize = this.gridSize / 2;
+        this.createGrid();
+    }
+    scaleGridUp() {
+        this.gridSize = this.gridSize * 2
+        this.createGrid();
     }
 }
 export class Drawable extends Grid {
     constructor(canvas, draw) {
         super(canvas, draw);
-        this.symmetryCount = 6;
+        this.symmetryCount = 3;
         this.oldSymmetries = new Array();
         this.newSymmetries = new Array();
         this.previousPoint = [this.originX, this.originY];
         this.lineWidth = 2;
-        this.symbol = this.draw.symbol();
-        this.fractalSymmetryCount = 6;
-        this.symbolList = Array()
-        this.fractalOffset = 200;
-        this.createSymmetrySymbols();
-        this.oldSymbols = Array();
         this.drawing = false;
-    }
-
-    newDrawing() {
-        // Saves the old symbols to a list
-        this.oldSymbols.push(this.symbolList);
-
-        // Makes a new symbol out of the old drawings
-        let oldSymbol = this.draw.symbol();
-        for (let a = 0; a < this.oldSymmetries.length; a++) {
-            for (let b = 0; b < this.oldSymmetries[a].length; b++) {
-                oldSymbol.add(this.oldSymmetries[a][b]);
-            }
-        }
-        // Creates instances of the new and old symbols
-        this.createSymmetrySymbols(oldSymbol, true);
-        this.createSymmetrySymbols();
-    }
-    createSymmetrySymbols(symbolToUse, ignoreSave) {
-        if (symbolToUse === undefined) symbolToUse = this.symbol;
-        for (let a = 0; a < this.symbolList.length; a++) {
-            this.symbolList[a].remove();
-        }
-        this.symbolList = []
-        for (let a = 0; a < this.fractalSymmetryCount; a++) {
-            let rotPos = rotateAroundPoint(this.originX, this.originY, this.originX, this.originY - this.fractalOffset, 360 / this.fractalSymmetryCount * a)
-            rotPos = this.inputToGrid(rotPos[0], rotPos[1])
-
-            let diffX = rotPos[0] - this.originX;
-            let diffY = rotPos[1] - this.originY;
-            let symb = this.draw.use(symbolToUse).move(diffX, diffY)
-            if (!ignoreSave) this.symbolList.push(symb);
-        }
-        let symb = this.draw.use(symbolToUse).move(0, 0)
-        if (!ignoreSave) this.symbolList.push(symb);
-    }
-    setNewFractalOffset(fractalOffset) {
-        this.fractalOffset = fractalOffset;
-        this.createSymmetrySymbols();
-    }
-    setNewFractalSymmetryLevel(newSymmetryLevel) {
-        this.fractalSymmetryCount = newSymmetryLevel;
-        this.createSymmetrySymbols();
-        console.log(newSymmetryLevel, this.fractalSymmetryCount);
     }
     setNewSymmetryLevel(newSymmetryLevel) {
         this.symmetryCount = newSymmetryLevel;
@@ -197,9 +160,6 @@ export class Drawable extends Grid {
     }
     setSymmetryCount(newSymmetryCount) {
         this.symmetryCount = newSymmetryCount;
-    }
-    setFractalSymmetryCount(newSymmetryCount) {
-        this.fractalSymmetryCount = newSymmetryCount;
     }
     // Undoes previously added point
     // TODO: This removes points from paths, but leaves the empty path element in the dom
@@ -221,16 +181,18 @@ export class Drawable extends Grid {
         }
     }
 }
-
 export class LineTool extends Drawable {
     constructor(canvas, draw) {
         super(canvas, draw);
+        this.group = draw.group().addClass("Lines");
     }
     startNewLine(x, y) {
         for (let a = 0; a < this.symmetryCount; a++) {
             let newLine = this.draw.path().fill('none').stroke({ color: 'black', width: this.lineWidth, linecap: 'round' });
             let rotPos = rotateAroundPoint(this.originX, this.originY, x, y, 360 / this.symmetryCount * a)
-            newLine.M(rotPos[0], rotPos[1])
+            newLine.M(rotPos[0], rotPos[1]).click(function () {
+                console.log("!!!!!")
+            })
             this.newSymmetries.push(newLine)
         }
     }
@@ -242,16 +204,13 @@ export class LineTool extends Drawable {
         }
         this.previousPoint = pos;
         for (let a = 0; a < this.newSymmetries.length; a++) {
-            this.symbol.add(this.newSymmetries[a]);
+            this.group.add(this.newSymmetries[a]);
         }
     }
     toolDown(mX, mY) {
         this.drawing = true;
         this.previousPoint = this.inputToGrid(mX, mY, this.originX, this.originY);
         this.startNewLine(this.previousPoint[0], this.previousPoint[1]);
-        for (let a = 0; a < this.newSymmetries.length; a++) {
-            this.symbol.add(this.newSymmetries[a]);
-        }
     }
     toolUp() {
         this.drawing = false;
@@ -261,71 +220,12 @@ export class LineTool extends Drawable {
     }
     toolMove(mX, mY) {
         var curPoint = this.inputToGrid(mX, mY, this.originX, this.originY);
-        if (this.drawing) {
-            if (this.previousPoint[0] != curPoint[0] || this.previousPoint[1] != curPoint[1]) {
+        if (this.drawing)
+            if (this.previousPoint[0] != curPoint[0] || this.previousPoint[1] != curPoint[1])
                 this.drawLine(curPoint[0], curPoint[1], true);
-                console.log("NEW LINE")
-            }
-        }
     }
 }
 
-/* export class CircleTool extends Grid {
-    constructor(canvas, draw) {
-        super(canvas, draw);
-        this.circleStart = [0, 0];
-        this.drawing = false;
-        //  this.circle = this.draw.circle(this.gridSize).fill('none').stroke({ color: '#282D6A', width: 2 });
-
-        this.symbol = this.draw.symbol();
-        this.symmetryCount = 6;
-        this.dtravellDistance = 0;
-        this.newSymmetries = Array()
-
-    }
-
-    toolDown(mX, mY) {
-        this.circleStart = [mX, mY];
-        this.drawing = true;
-        //  th is.startNewCircle();
-        //this.circle.circle(this.gridSize).fill('none').stroke({ color: '#282D6A', width: 2 });
-        let mouseInGrid = this.inputToGrid(mX, mY, this.originX, this.originY);
-
-        if (mouseInGrid[0] == this.originX && mouseInGrid[1] == this.originY) {
-            let newCircle2 = this.draw.circle(this.gridSize).fill('none')
-                .stroke({ color: '#282D6A', width: 2 }).move(mouseInGrid[0] - this.gridSize / 2, mouseInGrid[1] - this.gridSize / 2);
-
-        }
-        else {
-            for (let a = 0; a < this.symmetryCount; a++) {
-                let rotPos = rotateAroundPoint(this.originX, this.originY, mouseInGrid[0], mouseInGrid[1], 360 / this.symmetryCount * a)
-                let newCircle = this.draw.circle(this.gridSize).fill('none').stroke({ color: '#282D6A', width: 2 }).move(rotPos[0] - this.gridSize / 2, rotPos[1] - this.gridSize / 2)
-
-            }
-
-        }
-    }
-
-    drawSimple() {
-
-    }
-
-    toolMove(mX, mY) {
-        this.travellDistance = getDistance(mX, mY, this.circleStart[0], this.circleStart[1]);
-        if (this.travellDistance > this.gridSize) {
-            let closestPos = this.inputToGrid(mX, mY, this.originX, this.originY);
-            let diffX = closestPos[0] - this.circleStart[0];
-            let diffY = closestPos[1] - this.circleStart[1];
-            let circleCenterX = this.circleStart[0] + diffX;
-            let circleCenterY = this.circleStart[1] + diffY;
-
-        }
-
-    }
-    toolUp() {
-
-    }
-} */
 export class ArchTool extends Drawable {
     constructor(canvas, draw) {
         super(canvas, draw);
@@ -335,13 +235,11 @@ export class ArchTool extends Drawable {
         this.archStart;
         this.group = draw.group().addClass("Arches");
     }
-
     toolDown(mX, mY) {
         this.drawing = true;
         this.archStart = this.inputToGrid(mX, mY);
         this.previousPoint = this.archStart;
     }
-
     toolMove(mX, mY) {
         let curPoint = this.inputToGrid(mX, mY);
         if (this.drawing) {
@@ -365,7 +263,6 @@ export class ArchTool extends Drawable {
             }
         }
     }
-
     toolUp() {
         this.drawing = false;
         // adds the previously drawn archs to a group
@@ -375,21 +272,15 @@ export class ArchTool extends Drawable {
             tmpGroup.add(this.tempArchs[a].svg());
         }
         this.group.add(tmpGroup);
-
         // Removes old temp archs
         this.tempArchs.forEach(function name(params) {
             params.remove();
         });
-
     }
-
     undo() {
         let previous = $('.NewArc').length;
-        console.log(previous)
         $('.NewArc')[previous - 1].remove();
-
     }
-
 }
 
 export class Tool {
@@ -397,54 +288,44 @@ export class Tool {
         this.canvas = canvas;
         this.draw = draw;
         this.lineTool = new LineTool(canvas, draw, this.symbol);
-        //    this.circleTool = new CircleTool(canvas, draw);
         this.archTool = new ArchTool(canvas, draw);
-        this.activeTool = "ARCH"
+        this.activeTool = "LINE"
         // Arrays used to cycle through different symmetry levels
-        this.symmetryLevels = [3, 6];
-        this.fractalSymmetryLevels = [3, 6, 0];
-        this.activeSymmetry = 3;
-        this.activeFractalSymmetry = 3;
-    }
-    newDrawing() {
-        this.lineTool.newDrawing();
-    }
-    changeFractalOffset(change) {
-        this.lineTool.setNewFractalOffset(this.lineTool.fractalOffset + change)
-    }
-    changeFractalSymmetryLevels() {
-        this.fractalSymmetryLevels.unshift(this.fractalSymmetryLevels.pop());
-        this.activeFractalSymmetry = this.fractalSymmetryLevels[0];
-        this.lineTool.setNewFractalSymmetryLevel(this.activeFractalSymmetry)
+        this.symmetryLevels =  [3,6];
+        this.activeSymmetry = 1;
     }
     changeSymmetryLevels() {
         this.symmetryLevels.unshift(this.symmetryLevels.pop());
         this.activeSymmetry = this.symmetryLevels[0];
         this.lineTool.setNewSymmetryLevel(this.activeSymmetry)
-    }
+        this.archTool.setNewSymmetryLevel(this.activeSymmetry)
+    } 
     setActiveTool(activeTool) {
         this.activeTool = activeTool;
     }
     scaleGridUp() {
         this.lineTool.scaleGridUp();
+        this.archTool.scaleGridUp();
     }
     scaleGridDown() {
         this.lineTool.scaleGridDown();
+        this.archTool.scaleGridDown();
     }
     scaleLineUp() {
         this.lineTool.scaleLineUp();
+        this.archTool.scaleLineUp();
     }
     scaleLineDown() {
         this.lineTool.scaleLineDown();
+        this.archTool.scaleLineDown();
     }
     setLineWidth(lineWidth) {
         this.lineTool.setLineWidth(lineWidth);
+        this.archTool.setLineWidth(lineWidth);
     }
     toolDown(mX, mY) {
         if (this.activeTool === "LINE")
             this.lineTool.toolDown(mX, mY);
-        /*         if (this.activeTool === "CIRCLE")
-                    this.circleTool.toolDown(mX, mY); */
         if (this.activeTool === "ARCH")
             this.archTool.toolDown(mX, mY);
     }
@@ -452,16 +333,12 @@ export class Tool {
 
         if (this.activeTool === "LINE")
             this.lineTool.toolMove(mX, mY);
-        /*         if (this.activeTool === "CIRCLE")
-                    this.circleTool.toolMove(mX, mY); */
         if (this.activeTool === "ARCH")
             this.archTool.toolMove(mX, mY);
     }
     toolUp() {
         if (this.activeTool === "LINE")
             this.lineTool.toolUp();
-        /*         if (this.activeTool === "CIRCLE")
-                    this.circleTool.toolUp(); */
         if (this.activeTool === "ARCH")
             this.archTool.toolUp();
     }
@@ -472,8 +349,6 @@ export class Tool {
             this.archTool.undo();
     }
 }
-
-
 export function rotateAroundPoint(oX, oY, x, y, angle) {
     let radians = (Math.PI / 180) * angle,
         cos = Math.cos(radians),
